@@ -26,8 +26,8 @@ PROJ_TOP_MOD := top
 
 # Target config
 BOARD ?= had2019-badge
-DEVICE = 45k
-PACKAGE = CABGA381
+DEVICE = 12k
+PACKAGE = CABGA256
 SPEEDGRADE = 8
 
 NEXTPNR_ARGS = --pre-pack data/clocks.py
@@ -53,6 +53,13 @@ $(BUILD_TMP)/$(PROJ).bit $(BUILD_TMP)/$(PROJ).svf: $(BUILD_TMP)/$(PROJ).config $
 
 dfu_flash: $(BUILD_TMP)/$(PROJ).bit
 	$(DFU_UTIL) -d 1d50:614a,1d50:614b -a 5 -R -D $<
+
+flash: $(BUILD_TMP)/$(PROJ).bit
+	ecpprog $<
+
+prog: $(BUILD_TMP)/$(PROJ).bit
+	ecpprog -S $<
+
 
 # Always try to rebuild the hex file
 .PHONY: fw

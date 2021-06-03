@@ -1,10 +1,10 @@
-Hackaday Supercon 2019 badge playground
+icecrusher playground
 =======================================
 
 Collection of ip cores / modules and example projects for the
-Hackaday Supercon 2019 badge.
+icecrusher.
 
-Although primarely targetted at this badge, examples and projects
+Although primarely targetted at this board, examples and projects
 should be fairly easy to port to other ECP5 boards.
 
 Applicable license is individual to each IP core / project and is mentionnned

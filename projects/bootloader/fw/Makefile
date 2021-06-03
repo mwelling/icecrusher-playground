@@ -1,5 +1,5 @@
 BOARD ?= had2019-badge
-CROSS ?= riscv-none-embed-
+CROSS ?= riscv64-unknown-elf-
 CC = $(CROSS)gcc
 OBJCOPY = $(CROSS)objcopy
 

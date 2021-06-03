@@ -35,27 +35,13 @@
 
 module soc_had_misc (
 	// LEDs
-	output wire [8:0] led,
+	output wire [4:0] led,
 
 	// Buttons
-	input  wire [7:0] btn,
-
-	// LCD
-	inout  wire [17:0] lcd_db,
-	output wire lcd_rd,
-	output wire lcd_wr,
-	output wire lcd_rs,
-	output wire lcd_rst,
-	output wire lcd_cs,
-	input  wire lcd_id,
-	input  wire lcd_fmark,
-	output wire lcd_blen,
-
-	// Reboot command
-	output wire programn,
+	input  wire btn,
 
 	// Generic IO
-	inout  wire [29:0] genio,
+	inout  wire [19:0] genio,
 
 	// Wishbone interface
 	input  wire  [3:0] bus_addr,
@@ -64,10 +50,6 @@ module soc_had_misc (
 	input  wire bus_cyc,
 	input  wire bus_ack,
 	input  wire bus_we,
-
-	// Internal/external flash selection flipflop input
-	output reg  fsel_c,
-	output reg  fsel_d,
 
 	// Clock
 	input  wire clk,
@@ -84,15 +66,14 @@ module soc_had_misc (
 
 	reg  we_ctrl;
 	reg  we_led_pwm;
-	reg  we_lcd_fifo;
 
 	wire rd_rst;
 
 	// Buttons
 	reg  [16:0] btn_sample_cnt;
-	wire  [7:0] btn_io;
-	wire  [7:0] btn_r;
-	wire  [7:0] btn_val;
+	wire  btn_io;
+	wire  btn_r;
+	wire  btn_val;
 
 	// LEDs (including LCD backlight)
 	reg   [9:0] led_ena;
@@ -101,22 +82,6 @@ module soc_had_misc (
 
 	// Boot
 	reg   [7:0] boot_key;
-
-	// LCD
-	wire lcd_wr_i;
-	reg  lcd_rst_i;
-
-	wire [18:0] lf_di;
-	wire lf_wren;
-	wire lf_full;
-
-	wire [18:0] lf_do;
-	wire lf_rden;
-	wire lf_empty;
-
-	wire [17:0] lcd_db_io;
-	wire [ 1:0] lcd_ctrl_io;
-
 
 	// Bus interface
 	// -------------
@@ -134,24 +99,17 @@ module soc_had_misc (
 	begin
 		we_ctrl     <= ack_nxt & bus_we & (bus_addr[1:0] == 2'b00);
 		we_led_pwm  <= ack_nxt & bus_we & (bus_addr[1:0] == 2'b01);
-		we_lcd_fifo <= ack_nxt & bus_we &  bus_addr[1];
 	end
 
 	// Write
 	always @(posedge clk)
 		if (rst) begin
 			boot_key  <=  8'h00;
-			lcd_rst_i <=  1'b0;
 			led_ena   <= 10'h000;
 			led_pwm   <= 30'h3fffffff;
-			fsel_c    <= 1'b0;
-			fsel_d    <= 1'b0;
 		end else begin
 			if (we_ctrl) begin
 				boot_key  <= bus_wdata[31:24];
-				lcd_rst_i <= bus_wdata[15];
-				fsel_c    <= bus_wdata[14];
-				fsel_d    <= bus_wdata[13];
 				led_ena   <= bus_wdata[9:0];
 			end
 
@@ -169,7 +127,7 @@ module soc_had_misc (
 		else
 			bus_rdata <= bus_addr[0] ?
 				{ 2'b00, led_pwm } :
-				{ boot_key, btn_val, lcd_rst_i, fsel_c, fsel_d, 3'd0, led_ena };
+				{ boot_key, btn_val, 1'b0, 1'b0, 1'b0, 3'd0, led_ena };
 
 
 	// Buttons
@@ -178,14 +136,14 @@ module soc_had_misc (
 	// IO register
 	TRELLIS_IO #(
 		.DIR("INPUT")
-	) btn_io_I[7:0] (
+	) btn_io_I (
 		.B(btn),
 		.I(1'b0),
 		.T(1'b0),
 		.O(btn_io)
 	);
 
-	IFS1P3BX btn_ireg[7:0] (
+	IFS1P3BX btn_ireg (
 		.PD(1'b0),
 		.D(btn_io),
 		.SP(1'b1),
@@ -203,7 +161,7 @@ module soc_had_misc (
 	glitch_filter #(
 		.L(3),
 		.WITH_CE(1)
-	) btn_flt_I[7:0] (
+	) btn_flt_I (
 		.pin_iob_reg(btn_r),
 		.cond(1'b1),
 		.ce(btn_sample_cnt[16]),
@@ -244,60 +202,6 @@ module soc_had_misc (
 			led_out[i] <= led_ena[i] & (led_pwm[3*i+:3] >= pwm_map);
 
 	// Led output
-	assign led = led_out[8:0];
-	assign lcd_blen = led_out[9];
-
-
-	// Reboot key
-	// ----------
-
-	assign programn = (boot_key == 8'ha5) ? 1'b0 : 1'b1;
-
-
-	// LCD
-	// ---
-
-	// Generate write pulse. Rest is mapped directly from WB
-	assign lcd_wr_i = ~(ack_nxt & bus_addr[1]);
-
-	// PHY (just put IO registers on all signals since we don't support reads)
-	OFS1P3DX lcd_or_data_I[17:0] (
-		.CD(rst),
-		.D(bus_wdata[17:0]),
-		.SP(1'b1),
-		.SCLK(clk),
-		.Q(lcd_db_io)
-	);
-
-	TRELLIS_IO #(
-		.DIR("OUTPUT")
-	) lcd_io_data_I[17:0] (
-		.B(lcd_db),
-		.I(lcd_db_io),
-		.T(1'b0),
-		.O()
-	);
-
-	OFS1P3DX lcd_or_ctrl_I[1:0] (
-		.CD(rst),
-		.D({bus_addr[0], lcd_wr_i}),
-		.SP(1'b1),
-		.SCLK(clk),
-		.Q(lcd_ctrl_io)
-	);
-
-	TRELLIS_IO #(
-		.DIR("OUTPUT")
-	) lcd_io_ctrl_I[1:0] (
-		.B({lcd_rs, lcd_wr}),
-		.I(lcd_ctrl_io),
-		.T(1'b0),
-		.O()
-	);
-
-	// Misc / Unused
-	assign lcd_cs = 1'b0;
-	assign lcd_rd  = 1'b1;
-	assign lcd_rst = lcd_rst_i;
+	assign led = led_out[4:0];
 
 endmodule // soc_had_misc
